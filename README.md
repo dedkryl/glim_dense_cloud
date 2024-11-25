@@ -2,7 +2,7 @@
 
 ## Introduction
 
-**GLIM** is a versatile and extensible range-based 3D mapping framework.
+**GLIM** is a versatile and extensible range-based 3D mapping framework with dense cloude.
 
 - ***Accuracy:*** GLIM is based on direct multi-scan registration error minimization on factor graphs that enables to accurately retain the consistency of mappint results. GPU acceleration is supported to maximize the mapping speed and quality.
 - ***Easy-to-use:*** GLIM offers an interactive map correction interface that enables the user to manually correct mapping failures and easily refine mapping results.
