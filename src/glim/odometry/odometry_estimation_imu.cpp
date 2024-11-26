@@ -320,7 +320,7 @@ EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame(const Preprocessed
     if (span < params->smoother_lag - 0.1) {
       break;
     }
-
+    
     marginalized_frames.push_back(frames[marginalized_cursor]);
     frames[marginalized_cursor].reset();
     marginalized_cursor++;

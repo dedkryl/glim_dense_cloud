@@ -31,6 +31,8 @@
 #include <glim/common/imu_integration.hpp>
 #include <glim/mapping/callbacks.hpp>
 
+#include <glk/io/ply_io.hpp>
+
 #ifdef GTSAM_USE_TBB
 #include <tbb/task_arena.h>
 #endif
@@ -617,8 +619,20 @@ void GlobalMapping::save(const std::string& path) {
 
   logger->info("saving config");
   GlobalConfig::instance()->dump(path + "/config");
-}
+//////////////////////////////////////////////////////////////////////
+  logger->info("Additionaly export points and save to PLY");
 
+  //SubMap::Ptr submap
+  //gtsam_points::PointCloud::Ptr frame;                         ///< Merged submap frame
+  //Eigen::Vector4d* points; 
+
+  auto exported_points = export_points();
+  std::string ply_file_name = path + "/glim_ply.ply"; 
+  logger->info(std::string("Writing to file : ") + ply_file_name);
+  glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
+////////////////////////////////////////////////////////////////////////  
+}
+/*
 std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
   int num_all_points = 0;
   for (const auto& submap : submaps) {
@@ -629,6 +643,135 @@ std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
   all_points.reserve(num_all_points);
 
   for (const auto& submap : submaps) {
+    std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+      return submap->T_world_origin * p;
+    });
+  }
+
+  return all_points;
+}
+*/
+
+#include <type_traits>
+
+std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
+  int num_all_points = 0;
+  for (const auto& submap : submaps) {
+    num_all_points += submap->frame->size();
+  }
+
+  std::vector<Eigen::Vector4d> all_points;
+  all_points.reserve(num_all_points);
+
+  int submap_index = 0;//debug
+  for (const auto& submap : submaps) {
+    
+    submap_index++;
+    if(submap_index == 1)//random submap
+    {
+      logger->info("Submap {} data size below",submap_index);
+
+      logger->info("for random submap voxelmaps.size =  {}", submap->voxelmaps.size());// std::vector<gtsam_points::GaussianVoxelMap::Ptr> voxelmaps;  ///< Multi-resolution voxelmaps
+      
+      ////////////////////
+      logger->info("for random submap frames (Optimized odometry frames) size =  {}", submap->frames.size());//std::vector<EstimationFrame::ConstPtr> frames;       ///< Optimized odometry frames
+      if(submap->frames.at(1)->raw_frame)
+      {
+        logger->info("Optimized odometry frame 1 has raw_frame(PreprocessedFrame) ");//PreprocessedFrame::ConstPtr
+        logger->info("Optimized odometry frame 1 raw_frame stamp = {}", submap->frames.at(1)->raw_frame->stamp); // Timestamp at the beginning of the scan
+        logger->info("Optimized odometry frame 1 raw_frame scan_end_time = {}", submap->frames.at(1)->raw_frame->scan_end_time);  // Timestamp at the end of the scan
+
+        logger->info("Optimized odometry frame 1 raw_frame times.size = {}",submap->frames.at(1)->raw_frame->times.size());            // Point timestamps w.r.t. the first pt
+        logger->info("Optimized odometry frame 1 raw_frame intensities.size = {}", submap->frames.at(1)->raw_frame->intensities.size());      // Point intensities
+        logger->info("Optimized odometry frame 1 raw_frame points.size = {}",submap->frames.at(1)->raw_frame->points.size());  // Points (homogeneous coordinates)
+
+        logger->info("Optimized odometry frame 1 raw_frame k_neighbors = {}",submap->frames.at(1)->raw_frame->k_neighbors);             // Number of neighbors of each point
+        logger->info("Optimized odometry frame 1 raw_frame neighbors.size = {}",submap->frames.at(1)->raw_frame->neighbors.size());  // Points (homogeneous coordinates)
+
+        logger->info("Optimized odometry frame 1 raw_frame raw_points.size = {}",submap->frames.at(1)->raw_frame->raw_points->size());
+        logger->info("Optimized odometry frame 1 raw_frame raw_points stamp = {}",submap->frames.at(1)->raw_frame->raw_points->stamp);
+        logger->info("Optimized odometry frame 1 raw_frame raw_points times.size = {}",submap->frames.at(1)->raw_frame->raw_points->times.size());
+ 
+        logger->info("Optimized odometry frame 1 raw_frame raw_points intensities.size = {}",submap->frames.at(1)->raw_frame->raw_points->intensities.size());
+        logger->info("Optimized odometry frame 1 raw_frame raw_points times.points = {}",submap->frames.at(1)->raw_frame->raw_points->points.size());
+        logger->info("Optimized odometry frame 1 raw_frame raw_points colors.size = {}",submap->frames.at(1)->raw_frame->raw_points->colors.size());
+
+      }
+      else
+      {
+        logger->info("Optimized odometry frame 1 has not raw_frame");//PreprocessedFrame::ConstPtr
+      }
+      
+      if(submap->frames.at(1)->frame)
+        logger->info("Optimized odometry frame 1 frame member (PointCloud) size =  {}",submap->frames.at(1)->frame->size());//gtsam_points::PointCloud::ConstPtr frame
+      else
+        logger->info("Optimized odometry frame 1 has not frame (PointCloud)");
+      
+      ////////////////////////
+      
+      logger->info("for random submap odom_frames ( Original odometry frames) size =  {}", submap->odom_frames.size());//std::vector<EstimationFrame::ConstPtr> odom_frames;  ///< Original odometry frames
+      if(submap->odom_frames.at(1)->raw_frame)
+      {
+        logger->info("Original odometry frame 1 has raw_frame");//PreprocessedFrame::ConstPtr
+      }
+      else
+      {
+        logger->info("Original odometry frame 1 has not raw_frame");//PreprocessedFrame::ConstPtr
+      }
+      
+      if(submap->odom_frames.at(1)->frame)
+        logger->info("Original odometry frame 1 frame member (PointCloud) size =  {}",submap->odom_frames.at(1)->frame->size());//gtsam_points::PointCloud::ConstPtr frame
+      else
+        logger->info("Original odometry frame 1 has not frame (PointCloud)");
+
+      ////////////////////////////////////
+
+      logger->info("submap->frame is PointCloud = {}", std::is_same_v<decltype(submap->frame),  gtsam_points::PointCloud::Ptr>);
+      logger->info("submap->frame is PointCloudCPU = {}", std::is_same_v<decltype(submap->frame),  gtsam_points::PointCloudCPU::Ptr>);
+      logger->info("submap->frame is PointCloudGPU = {}", std::is_same_v<decltype(submap->frame),  gtsam_points::PointCloudGPU::Ptr>);
+      
+      //gtsam_points::PointCloudCPU* temp = (gtsam_points::PointCloudCPU*)submap->frame.get();
+      //Не помогло!! Разбирайся - почему в EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame()
+      /*
+          covariance_estimation->estimate(points_imu, raw_frame->neighbors, normals, covs);
+          auto frame = std::make_shared<gtsam_points::PointCloudCPU>(points_imu);
+          frame->add_covs(covs);
+          frame->add_normals(normals);
+
+          а здесь их нет ????
+      */
+      
+  
+      logger->info("for random submap frame->has_times = {}",submap->frame->has_times());        ///< Check if the point cloud has per-point timestamps
+      logger->info("for random submap frame->has_points = {}",submap->frame->has_points());       ///< Check if the point cloud has points
+      logger->info("for random submap frame->has_normal = {}",submap->frame->has_normals());      ///< Check if the point cloud has point normals
+      logger->info("for random submap frame->has_covs = {}",submap->frame->has_covs());         ///< Check if the point cloud has point covariances
+      logger->info("for random submap frame->has_intensities = {}",submap->frame->has_intensities());  ///< Check if the point cloud has point intensities
+
+      logger->info("for random submap frame->has_times_gpu = {}",submap->frame->has_times_gpu());        ///< Check if the point cloud has per-point timestamps on GPU
+      logger->info("for random submap frame->has_points_gpu = {}",submap->frame->has_points_gpu());       ///< Check if the point cloud has points on GPU
+      logger->info("for random submap frame->has_normals_gpu = {}",submap->frame->has_normals_gpu());      ///< Check if the point cloud has point normals on GPU
+      logger->info("for random submap frame->has_covs_gpu = {}",submap->frame->has_covs_gpu());         ///< Check if the point cloud has point covariances on GPU
+      logger->info("for random submap frame->has_intensities_gpu = {}",submap->frame->has_intensities_gpu());  ///< Check if the point cloud has point intensities on GPU
+
+      logger->info("Submap {} frame size {}",submap_index, submap->frame->size());
+
+      for (size_t i = 0; i < submap->frame->size(); i++)
+      {
+        if(i == 5)//random point in frame (PointCloud)
+        {
+          Eigen::Vector4d* point = submap->frame->points + i;
+   
+          for (auto &&p : *point)
+          {
+            logger->info("Submap 1  , point 5 in frame p = {}", p); 
+          }
+        }
+        
+      }
+      
+
+    }
     std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
       return submap->T_world_origin * p;
     });

@@ -13,7 +13,9 @@ EstimationFrame::Ptr EstimationFrame::clone() const {
 EstimationFrame::Ptr EstimationFrame::clone_wo_points() const {
   EstimationFrame::Ptr cloned(new EstimationFrame);
   *cloned = *this;
-  cloned->raw_frame.reset();
+  //////////////////////
+  //cloned->raw_frame.reset();
+  //////////////////////
   cloned->frame.reset();
   cloned->voxelmaps.clear();
   cloned->custom_data.clear();
