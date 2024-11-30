@@ -619,50 +619,63 @@ void GlobalMapping::save(const std::string& path) {
 
   logger->info("saving config");
   GlobalConfig::instance()->dump(path + "/config");
-//////////////////////////////////////////////////////////////////////
-  logger->info("Additionaly export points and save to PLY");
+  //if
+  //based_on_legacy_save_ply(path);
+  another_save_ply(path);
+}
 
-  //SubMap::Ptr submap
-  //gtsam_points::PointCloud::Ptr frame;                         ///< Merged submap frame
-  //Eigen::Vector4d* points; 
 
+void GlobalMapping::based_on_legacy_save_ply(const std::string& path)
+{
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Original export points and save to PLY");
   auto exported_points = export_points();
   std::string ply_file_name = path + "/glim_ply.ply"; 
   logger->info(std::string("Writing to file : ") + ply_file_name);
   glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
 ////////////////////////////////////////////////////////////////////////  
 }
-/*
-std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
+
+
+void GlobalMapping::another_save_ply(const std::string& path)
+{
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Another export points and save to PLY");
+  auto exported_points = another_export_points();
+  std::string ply_file_name = path + "/another_ply.ply"; 
+  logger->info(std::string("Writing to file : ") + ply_file_name);
+  glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
+////////////////////////////////////////////////////////////////////////  
+}
+
+std::vector<Eigen::Vector4d> GlobalMapping::another_export_points()
+{
   int num_all_points = 0;
   for (const auto& submap : submaps) {
-    num_all_points += submap->frame->size();
+    for (const auto& fs : submap->frames) {
+      num_all_points += fs->frame->points->size();
+    }
   }
 
   std::vector<Eigen::Vector4d> all_points;
   all_points.reserve(num_all_points);
 
   for (const auto& submap : submaps) {
-    std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
-      return submap->T_world_origin * p;
-    });
+    for (const auto& fs : submap->frames) {
+      std::transform(fs->frame->points, fs->frame->points + fs->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+        return submap->T_world_origin * p;
+      });
+    }
   }
 
   return all_points;
 }
-*/
+
 
 #include <type_traits>
-
-std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
-  int num_all_points = 0;
-  for (const auto& submap : submaps) {
-    num_all_points += submap->frame->size();
-  }
-
-  std::vector<Eigen::Vector4d> all_points;
-  all_points.reserve(num_all_points);
-
+//debug only not-safe trace
+void GlobalMapping::print_submap_structure()
+{
   int submap_index = 0;//debug
   for (const auto& submap : submaps) {
     
@@ -703,10 +716,40 @@ std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
       }
       
       if(submap->frames.at(1)->frame)
+      {
         logger->info("Optimized odometry frame 1 frame member (PointCloud) size =  {}",submap->frames.at(1)->frame->size());//gtsam_points::PointCloud::ConstPtr frame
-      else
-        logger->info("Optimized odometry frame 1 has not frame (PointCloud)");
+          logger->info("Optimized odometry frame 1 frame->has_times = {}",submap->frames.at(1)->frame->has_times());        ///< Check if the point cloud has per-point timestamps
+          logger->info("Optimized odometry frame 1 frame->has_points = {}",submap->frames.at(1)->frame->has_points());       ///< Check if the point cloud has points
+          logger->info("Optimized odometry frame 1 frame->has_normal = {}",submap->frames.at(1)->frame->has_normals());      ///< Check if the point cloud has point normals
+          logger->info("Optimized odometry frame 1 frame->has_covs = {}",submap->frames.at(1)->frame->has_covs());         ///< Check if the point cloud has point covariances
+          logger->info("Optimized odometry frame 1 frame->has_intensities = {}",submap->frames.at(1)->frame->has_intensities());  ///< Check if the point cloud has point intensities
+
+          logger->info("Optimized odometry frame 1 frame->has_times_gpu = {}",submap->frames.at(1)->frame->has_times_gpu());        ///< Check if the point cloud has per-point timestamps on GPU
+          logger->info("Optimized odometry frame 1 frame->has_points_gpu = {}",submap->frames.at(1)->frame->has_points_gpu());       ///< Check if the point cloud has points on GPU
+          logger->info("Optimized odometry frame 1 frame->has_normals_gpu = {}",submap->frames.at(1)->frame->has_normals_gpu());      ///< Check if the point cloud has point normals on GPU
+          logger->info("Optimized odometry frame 1 frame->has_covs_gpu = {}",submap->frames.at(1)->frame->has_covs_gpu());         ///< Check if the point cloud has point covariances on GPU
+          logger->info("Optimized odometry frame 1 frame->has_intensities_gpu = {}",submap->frames.at(1)->frame->has_intensities_gpu());  ///< Check if the point cloud has point intensities on GPU
+
+          logger->info("Submap {} Optimized odometry frame 1 frame size {}",submap_index, submap->frames.at(1)->frame->size());
+
+          for (size_t i = 0; i < submap->frames.at(1)->frame->size(); i++)
+          {
+            if(i == 5)//random point in frame (PointCloud)
+            {
+              Eigen::Vector4d* point = submap->frames.at(1)->frame->points + i;
       
+              for (auto &&p : *point)
+              {
+                logger->info("Submap 1  , point 5 in Optimized odometry frame 1 frame p = {}", p); 
+              }
+            }
+         }
+        
+      }
+      else
+      {
+        logger->info("Optimized odometry frame 1 has not frame (PointCloud)");
+      }
       ////////////////////////
       
       logger->info("for random submap odom_frames ( Original odometry frames) size =  {}", submap->odom_frames.size());//std::vector<EstimationFrame::ConstPtr> odom_frames;  ///< Original odometry frames
@@ -769,10 +812,25 @@ std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
         }
         
       }
-      
-
     }
-    std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+  }
+
+  return;
+
+}
+
+std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
+ 
+  int num_all_points = 0;
+  for (const auto& submap : submaps) {
+    num_all_points += submap->frame->size();
+  }
+
+  std::vector<Eigen::Vector4d> all_points;
+  all_points.reserve(num_all_points);
+
+  for (const auto& submap : submaps) {
+     std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
       return submap->T_world_origin * p;
     });
   }

@@ -71,6 +71,12 @@ public:
 
   virtual void save(const std::string& path) override;
   virtual std::vector<Eigen::Vector4d> export_points() override;
+  //debug only
+  void print_submap_structure();
+
+  void based_on_legacy_save_ply(const std::string& path);
+  void another_save_ply(const std::string& path);
+  std::vector<Eigen::Vector4d> another_export_points();  
 
   /**
    * @brief Load a mapping result from a dumped directory
