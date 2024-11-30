@@ -33,6 +33,7 @@
 
 #include <glk/io/ply_io.hpp>
 
+
 #ifdef GTSAM_USE_TBB
 #include <tbb/task_arena.h>
 #endif
@@ -621,7 +622,9 @@ void GlobalMapping::save(const std::string& path) {
   GlobalConfig::instance()->dump(path + "/config");
   //if
   //based_on_legacy_save_ply(path);
-  another_save_ply(path);
+  //another_save_ply(path);
+  another_save_las(path); 
+
 }
 
 
@@ -645,6 +648,131 @@ void GlobalMapping::another_save_ply(const std::string& path)
   std::string ply_file_name = path + "/another_ply.ply"; 
   logger->info(std::string("Writing to file : ") + ply_file_name);
   glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
+////////////////////////////////////////////////////////////////////////  
+}
+
+
+bool GlobalMapping::fillView(pdal::PointViewPtr view)
+{
+  try
+  {
+    int i = 0;
+    for (const auto& submap : submaps) {
+      for (const auto& fs : submap->frames) {
+/*
+        if(fs->frame->has_times())
+        {
+          double timestamp = *(fs->frame->times);
+          view->setField(pdal::Dimension::Id::GpsTime, i, timestamp);
+        }
+        else
+          logger->warn("Point must have GpsTime");
+*/
+        view->setField(pdal::Dimension::Id::GpsTime, i, (fs->raw_frame->scan_end_time - fs->raw_frame->stamp)/2); // ?????
+
+        if(fs->frame->has_points())
+        {
+          Eigen::Vector4d p = *(fs->frame->points);
+          Eigen::Vector4d pp = submap->T_world_origin*p;
+          view->setField(pdal::Dimension::Id::X, i, pp[0] );
+          view->setField(pdal::Dimension::Id::Y, i, pp[1]);
+          view->setField(pdal::Dimension::Id::Z, i, pp[2]);
+        }
+        else
+          logger->warn("Point must have coords");
+/*
+        if(fs->frame->has_intensities())
+          view->setField(pdal::Dimension::Id::Intensity, i, *(fs->frame->intensities));
+        else
+          logger->warn("Point must have Intensity");
+*/
+        if(!fs->raw_frame->intensities.empty())
+        {
+          double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
+          view->setField(pdal::Dimension::Id::Intensity, i, sum/fs->raw_frame->intensities.size());
+        }
+        else
+          logger->warn("Point must have Intensity");
+
+        if(fs->frame->has_normals())
+        {
+          Eigen::Vector4d n = *(fs->frame->normals);
+          view->setField(pdal::Dimension::Id::NormalX, i, n[0]);
+          view->setField(pdal::Dimension::Id::NormalY, i, n[1]);
+          view->setField(pdal::Dimension::Id::NormalZ, i, n[2]);
+        }
+        else
+          logger->warn("Point must have Normals");
+  
+        i++;
+        
+      }
+    }
+
+  }
+  catch(const std::exception& e)
+  {
+    logger->error("GlobalMapping::fillView error: {}",e.what());
+    return false;
+  }
+  return true;
+}
+
+
+
+void GlobalMapping::another_save_las(const std::string& path)
+{
+/*
+в LAS должны быть все данные
+XYZ, нормали (они же угол излучения), GPS-время, интенсивность
+*/
+
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Another points  save to LAS");
+  //auto exported_points = another_export_points();
+  using namespace pdal;
+  std::string las_file_name = path + "/another_las.las"; 
+  Options options;
+  options.add("filename", las_file_name);
+
+  PointTable table;
+  table.layout()->registerDim(Dimension::Id::GpsTime);
+  table.layout()->registerDim(Dimension::Id::X);
+  table.layout()->registerDim(Dimension::Id::Y);
+  table.layout()->registerDim(Dimension::Id::Z);
+  table.layout()->registerDim(Dimension::Id::Intensity);
+  table.layout()->registerDim(Dimension::Id::NormalX);
+  table.layout()->registerDim(Dimension::Id::NormalY);
+  table.layout()->registerDim(Dimension::Id::NormalZ);
+
+  logger->info(std::string("Writing to file : ") + las_file_name);
+  PointViewPtr view(new PointView(table));
+  if(!view)
+  {
+    logger->error("Unable to const PointView");
+    return;
+  }
+
+  if(!fillView(view))
+    return;
+
+  BufferReader reader;
+  reader.addView(view);
+
+  StageFactory factory;
+
+  // StageFactory always "owns" stages it creates. They'll be destroyed with the factory.
+  Stage *writer = factory.createStage("writers.las");
+  if(!writer)
+  {
+        std::cout << "Unable to create writer..." << std::endl;
+        return;
+  }
+
+  writer->setInput(reader);
+  writer->setOptions(options);
+  writer->prepare(table);
+  writer->execute(table);
 ////////////////////////////////////////////////////////////////////////  
 }
 

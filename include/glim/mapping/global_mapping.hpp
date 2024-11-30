@@ -6,6 +6,19 @@
 #include <boost/shared_ptr.hpp>
 #include <glim/mapping/global_mapping_base.hpp>
 
+
+////////////////////////////
+//Save to LAS PDAL library headers
+#include <pdal/PointView.hpp>
+#include <pdal/PointTable.hpp>
+#include <pdal/Dimension.hpp>
+#include <pdal/Options.hpp>
+#include <pdal/StageFactory.hpp>
+#include <io/BufferReader.hpp>
+
+////////////////////////////
+
+
 namespace gtsam {
 class Values;
 class NonlinearFactorGraph;
@@ -76,7 +89,10 @@ public:
 
   void based_on_legacy_save_ply(const std::string& path);
   void another_save_ply(const std::string& path);
-  std::vector<Eigen::Vector4d> another_export_points();  
+  std::vector<Eigen::Vector4d> another_export_points();
+
+   void another_save_las(const std::string& path);
+   bool fillView(pdal::PointViewPtr view);  
 
   /**
    * @brief Load a mapping result from a dumped directory

@@ -28,6 +28,8 @@ find_package(GTSAM REQUIRED)
 find_package(gtsam_points REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(spdlog REQUIRED)
+#Save to LAS PDAL library
+find_package(PDAL 2.0.0 REQUIRED CONFIG)
 
 if(BUILD_WITH_VIEWER)
   find_package(Iridescence REQUIRED)
@@ -92,6 +94,8 @@ target_include_directories(glim PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/json/include>
   $<INSTALL_INTERFACE:include/glim>
+  ${PDAL_INCLUDE_DIRS}
+  ${PDAL_INCLUDE_DIRS}/pdal
   ${OpenCV_INCLUDE_DIRS}
 )
 target_link_libraries(glim
@@ -104,6 +108,7 @@ target_link_libraries(glim
   spdlog::spdlog
   $<TARGET_NAME_IF_EXISTS:Iridescence::Iridescence>
   ${OpenCV_LIBRARIES}
+  ${PDAL_LIBRARIES}
 )
 list(APPEND glim_LIBRARIES glim)
 
@@ -233,8 +238,8 @@ if(DEFINED ENV{ROS_VERSION})
     # ROS2
     find_package(ament_cmake REQUIRED)
     install(DIRECTORY config DESTINATION share/glim)
-    ament_export_include_directories(include ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS})
-    ament_export_libraries(${glim_LIBRARIES} ${GTSAM_LIBRARIES} fmt spdlog::spdlog)
+    ament_export_include_directories(include ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS} ${PDAL_INCLUDE_DIRS} ${PDAL_INCLUDE_DIRS}/pdal)
+    ament_export_libraries(${glim_LIBRARIES} ${GTSAM_LIBRARIES} fmt spdlog::spdlog ${PDAL_LIBRARIES})
     ament_export_targets(glim-targets HAS_LIBRARY_TARGET)
     ament_package(CONFIG_EXTRAS "cmake/glim-config.cmake.in")
   elseif($ENV{ROS_VERSION} EQUAL 1)
