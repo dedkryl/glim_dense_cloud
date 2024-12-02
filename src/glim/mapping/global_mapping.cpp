@@ -31,8 +31,6 @@
 #include <glim/common/imu_integration.hpp>
 #include <glim/mapping/callbacks.hpp>
 
-#include <glk/io/ply_io.hpp>
-
 
 #ifdef GTSAM_USE_TBB
 #include <tbb/task_arena.h>
@@ -623,8 +621,8 @@ void GlobalMapping::save(const std::string& path) {
   //if
   //based_on_legacy_save_ply(path);
   //another_save_ply(path);
+  //another_save_ply_extended(path);
   another_save_las(path); 
-
 }
 
 
@@ -652,6 +650,118 @@ void GlobalMapping::another_save_ply(const std::string& path)
 }
 
 
+void GlobalMapping::another_save_ply_extended(const std::string& path)
+{
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Another expended export points and save to PLY");
+  glk::PLYData ply;
+  if(!fillPLYData(ply))
+    return;
+  std::string ply_file_name = path + "/another_extended_ply.ply"; 
+  logger->info(std::string("Writing to file : ") + ply_file_name);
+  glk::save_ply_binary(ply_file_name, ply);
+////////////////////////////////////////////////////////////////////////  
+}
+
+bool GlobalMapping::fillPLYData(glk::PLYData& ply)
+{
+  std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> points;
+  std::vector<Eigen::Vector4d, Eigen::aligned_allocator<Eigen::Vector4d>> normals;
+  int num_points = 0;
+  int num_normals = 0;
+
+  try
+  {
+
+    int num_all_points = 0;
+    for (const auto& submap : submaps) {
+      for (const auto& fs : submap->frames) {
+        num_all_points += fs->frame->points->size();
+      }
+    }
+
+    logger->debug("fillPLYData num_all_points : {}", num_all_points);
+
+
+    int i = 0;
+    for (const auto& submap : submaps) {
+      for (const auto& fs : submap->frames) {
+        //NB: timestamp not used in  PLY format
+        if(fs->frame->has_points())
+        {
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            Eigen::Vector4d p = *(fs->frame->points + k);
+            Eigen::Vector4d pp = submap->T_world_origin*p;
+            num_points++;
+            points.push_back(pp);
+          }
+        }
+        else
+          logger->warn("Point must have coords");
+
+        if(!fs->raw_frame->intensities.empty())
+        {
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
+            ply.intensities.push_back(sum/fs->raw_frame->intensities.size());
+          }
+        }
+        else
+          logger->warn("Point must have Intensity");
+
+        if(fs->frame->has_normals())
+        {
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            Eigen::Vector4d n = *(fs->frame->normals + k);
+            num_normals++;
+            normals.push_back(n);
+          }
+        }
+        else
+          logger->warn("Point must have Normals");
+  
+        i++;
+        
+      }
+    }
+
+    ply.vertices.resize(num_points);
+    for (int i = 0; i < num_points; i++) {
+      ply.vertices[i] = points[i].template head<3>().template cast<float>();
+    }
+
+    if(num_normals == num_points)
+    {
+      ply.normals.resize(num_points);
+      for (int i = 0; i < num_points; i++) {
+        ply.normals[i] = normals[i].template head<3>().template cast<float>();
+      }
+    }
+    else
+         logger->warn("GlobalMapping::fillPLYData warning : 'num_normals != num_points'");   
+
+    if(num_points != ply.intensities.size())
+    {
+      logger->warn("GlobalMapping::fillPLYData warning : 'num_normals != num_points'"); 
+    }
+
+    logger->debug("fillPLYData vertices : {}",ply.vertices.size());
+    logger->debug("fillPLYData normals : {}",ply.normals.size());
+    logger->debug("fillPLYData intensities : {}",ply.intensities.size());
+
+  }
+  catch(const std::exception& e)
+  {
+    logger->error("GlobalMapping::fillPLYData error: {}",e.what());
+    return false;
+  }
+  return true;
+}
+
+
 bool GlobalMapping::fillView(pdal::PointViewPtr view)
 {
   try
@@ -668,15 +778,21 @@ bool GlobalMapping::fillView(pdal::PointViewPtr view)
         else
           logger->warn("Point must have GpsTime");
 */
-        view->setField(pdal::Dimension::Id::GpsTime, i, (fs->raw_frame->scan_end_time - fs->raw_frame->stamp)/2); // ?????
+        for(size_t k = 0; k< fs->frame->size(); k++)
+        {
+          view->setField(pdal::Dimension::Id::GpsTime, i + k, (fs->raw_frame->scan_end_time - fs->raw_frame->stamp)/2); // ?????
+        }
 
         if(fs->frame->has_points())
         {
-          Eigen::Vector4d p = *(fs->frame->points);
-          Eigen::Vector4d pp = submap->T_world_origin*p;
-          view->setField(pdal::Dimension::Id::X, i, pp[0] );
-          view->setField(pdal::Dimension::Id::Y, i, pp[1]);
-          view->setField(pdal::Dimension::Id::Z, i, pp[2]);
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            Eigen::Vector4d p = *(fs->frame->points + k);
+            Eigen::Vector4d pp = submap->T_world_origin*p;
+            view->setField(pdal::Dimension::Id::X, i + k, pp[0] );
+            view->setField(pdal::Dimension::Id::Y, i + k, pp[1]);
+            view->setField(pdal::Dimension::Id::Z, i + k, pp[2]);
+          }
         }
         else
           logger->warn("Point must have coords");
@@ -688,18 +804,25 @@ bool GlobalMapping::fillView(pdal::PointViewPtr view)
 */
         if(!fs->raw_frame->intensities.empty())
         {
-          double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
-          view->setField(pdal::Dimension::Id::Intensity, i, sum/fs->raw_frame->intensities.size());
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
+            view->setField(pdal::Dimension::Id::Intensity, i + k, sum/fs->raw_frame->intensities.size());
+          }
         }
         else
           logger->warn("Point must have Intensity");
 
         if(fs->frame->has_normals())
         {
-          Eigen::Vector4d n = *(fs->frame->normals);
-          view->setField(pdal::Dimension::Id::NormalX, i, n[0]);
-          view->setField(pdal::Dimension::Id::NormalY, i, n[1]);
-          view->setField(pdal::Dimension::Id::NormalZ, i, n[2]);
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            Eigen::Vector4d n = *(fs->frame->normals + k);
+            //logger->warn("k = {}, NormalX = {}", k, n[0]);
+            view->setField(pdal::Dimension::Id::NormalX, i + k, n[0]);
+            view->setField(pdal::Dimension::Id::NormalY, i + k, n[1]);
+            view->setField(pdal::Dimension::Id::NormalZ, i + k, n[2]);
+          }
         }
         else
           logger->warn("Point must have Normals");
@@ -719,12 +842,19 @@ bool GlobalMapping::fillView(pdal::PointViewPtr view)
 }
 
 
-
 void GlobalMapping::another_save_las(const std::string& path)
 {
 /*
 в LAS должны быть все данные
 XYZ, нормали (они же угол излучения), GPS-время, интенсивность
+*/
+/*
+PDAL:
+In addition to the X, Y, Z coordinates of a point, PDAL can write many other attributes. Their full
+list and types are in [Dimension.json]. Most of these are not enabled by default. To enable them, the
+LAS file format minor version should be set to 4, the value of the `extra_dims` writer option should be `all`,
+and the attributes should be registered with the function ``registerDim()``.
+
 */
 
   //////////////////////////////////////////////////////////////////////
@@ -734,6 +864,8 @@ XYZ, нормали (они же угол излучения), GPS-время, �
   std::string las_file_name = path + "/another_las.las"; 
   Options options;
   options.add("filename", las_file_name);
+  options.add("extra_dims", "all");
+  options.add("minor_version", 4);
 
   PointTable table;
   table.layout()->registerDim(Dimension::Id::GpsTime);
@@ -785,6 +917,9 @@ std::vector<Eigen::Vector4d> GlobalMapping::another_export_points()
     }
   }
 
+  logger->debug("another_export_points num_all_points : {}", num_all_points);
+
+
   std::vector<Eigen::Vector4d> all_points;
   all_points.reserve(num_all_points);
 
@@ -795,6 +930,9 @@ std::vector<Eigen::Vector4d> GlobalMapping::another_export_points()
       });
     }
   }
+
+  logger->debug("vector<Eigen::Vector4d> all_points size {}", all_points.size());
+  
 
   return all_points;
 }

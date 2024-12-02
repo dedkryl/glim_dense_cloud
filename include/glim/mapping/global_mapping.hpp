@@ -6,7 +6,6 @@
 #include <boost/shared_ptr.hpp>
 #include <glim/mapping/global_mapping_base.hpp>
 
-
 ////////////////////////////
 //Save to LAS PDAL library headers
 #include <pdal/PointView.hpp>
@@ -17,6 +16,9 @@
 #include <io/BufferReader.hpp>
 
 ////////////////////////////
+
+#include <glk/io/ply_io.hpp>
+
 
 
 namespace gtsam {
@@ -90,6 +92,8 @@ public:
   void based_on_legacy_save_ply(const std::string& path);
   void another_save_ply(const std::string& path);
   std::vector<Eigen::Vector4d> another_export_points();
+  void another_save_ply_extended(const std::string& path);
+  bool fillPLYData(glk::PLYData& ply);
 
    void another_save_las(const std::string& path);
    bool fillView(pdal::PointViewPtr view);  
