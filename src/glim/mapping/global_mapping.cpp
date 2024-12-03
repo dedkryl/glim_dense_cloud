@@ -761,26 +761,19 @@ bool GlobalMapping::fillPLYData(glk::PLYData& ply)
   return true;
 }
 
-
+/*
 bool GlobalMapping::fillView(pdal::PointViewPtr view)
 {
+  int i = 0;
+  size_t points_counter = 0;//debug
   try
   {
-    int i = 0;
+    
     for (const auto& submap : submaps) {
       for (const auto& fs : submap->frames) {
-/*
-        if(fs->frame->has_times())
-        {
-          double timestamp = *(fs->frame->times);
-          view->setField(pdal::Dimension::Id::GpsTime, i, timestamp);
-        }
-        else
-          logger->warn("Point must have GpsTime");
-*/
         for(size_t k = 0; k< fs->frame->size(); k++)
         {
-          view->setField(pdal::Dimension::Id::GpsTime, i + k, (fs->raw_frame->scan_end_time - fs->raw_frame->stamp)/2); // ?????
+          view->setField(pdal::Dimension::Id::GpsTime, i + k, fs->raw_frame->stamp); 
         }
 
         if(fs->frame->has_points())
@@ -792,52 +785,141 @@ bool GlobalMapping::fillView(pdal::PointViewPtr view)
             view->setField(pdal::Dimension::Id::X, i + k, pp[0] );
             view->setField(pdal::Dimension::Id::Y, i + k, pp[1]);
             view->setField(pdal::Dimension::Id::Z, i + k, pp[2]);
+            points_counter++;
           }
         }
         else
-          logger->warn("Point must have coords");
-/*
-        if(fs->frame->has_intensities())
-          view->setField(pdal::Dimension::Id::Intensity, i, *(fs->frame->intensities));
-        else
-          logger->warn("Point must have Intensity");
-*/
+          logger->error("Point must have coords");
+
         if(!fs->raw_frame->intensities.empty())
         {
-          for(size_t k = 0; k< fs->frame->size(); k++)
+          if(fs->raw_frame->intensities.size() == fs->frame->size())
           {
-            double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
-            view->setField(pdal::Dimension::Id::Intensity, i + k, sum/fs->raw_frame->intensities.size());
+            for(size_t k = 0; k< fs->frame->size(); k++)
+            {
+              view->setField(pdal::Dimension::Id::Intensity, i + k, fs->raw_frame->intensities.at(k));
+            }
           }
+          else
+            logger->error("Smth going wrong: frame and intensities have different sizes!");
         }
         else
-          logger->warn("Point must have Intensity");
+          logger->error("Point must have Intensity");
 
         if(fs->frame->has_normals())
         {
           for(size_t k = 0; k< fs->frame->size(); k++)
           {
             Eigen::Vector4d n = *(fs->frame->normals + k);
-            //logger->warn("k = {}, NormalX = {}", k, n[0]);
             view->setField(pdal::Dimension::Id::NormalX, i + k, n[0]);
             view->setField(pdal::Dimension::Id::NormalY, i + k, n[1]);
             view->setField(pdal::Dimension::Id::NormalZ, i + k, n[2]);
           }
         }
         else
-          logger->warn("Point must have Normals");
-  
-        i++;
-        
+          logger->error("Point must have Normals");
+
+          i++;
       }
     }
-
   }
   catch(const std::exception& e)
   {
     logger->error("GlobalMapping::fillView error: {}",e.what());
     return false;
   }
+  logger->error("GlobalMapping::fillView i = {}, points_counter = {}", i, points_counter);
+  return true;
+}
+*/
+
+
+bool GlobalMapping::fillView(pdal::PointViewPtr view)
+{
+  struct Point
+  {
+    Point(){
+      time = 0, x = 0, y = 0, z = 0, intensity = 0, nx = 0, ny = 0, nz = 0;
+    }
+    double time;
+    double x;
+    double y;
+    double z;
+    double intensity;
+    double nx;
+    double ny;
+    double nz;
+  };
+
+  std::vector<Point> point_vector;
+  
+  try
+  {
+    
+    for (const auto& submap : submaps) {
+      for (const auto& fs : submap->frames) {
+        Point point;
+        for(size_t k = 0; k< fs->frame->size(); k++)
+        {
+          point.time = fs->raw_frame->stamp;
+          
+          if(fs->frame->has_points())
+          {
+            Eigen::Vector4d p = *(fs->frame->points + k);
+            Eigen::Vector4d pp = submap->T_world_origin*p;
+            point.x = pp[0];
+            point.y = pp[1];
+            point.z = pp[2];
+          }
+          else
+            logger->error("Point must have coords");
+          
+          if(!fs->raw_frame->intensities.empty())
+          {
+            if(fs->raw_frame->intensities.size() == fs->frame->size())
+            {
+               point.intensity = fs->raw_frame->intensities.at(k);
+            }
+            else
+              logger->error("Smth going wrong: frame and intensities have different sizes!");
+          }
+          else
+            logger->error("Point must have Intensity");
+          
+          if(fs->frame->has_normals())
+          {
+            Eigen::Vector4d n = *(fs->frame->normals + k);
+            point.nx = n[0];
+            point.ny = n[1];
+            point.nz = n[2];
+          }
+          else
+            logger->error("Point must have Normals");
+                    
+          point_vector.push_back(point); 
+        }
+      }
+    }
+
+    for (size_t l = 0; l< point_vector.size();l ++)
+    {
+      view->setField(pdal::Dimension::Id::GpsTime, l , point_vector[l].time);
+      view->setField(pdal::Dimension::Id::X, l , point_vector[l].x);
+      view->setField(pdal::Dimension::Id::Y, l , point_vector[l].y);
+      view->setField(pdal::Dimension::Id::Z, l , point_vector[l].z);
+      view->setField(pdal::Dimension::Id::Intensity, l , point_vector[l].intensity);
+      view->setField(pdal::Dimension::Id::NormalX, l , point_vector[l].nx);
+      view->setField(pdal::Dimension::Id::NormalY, l , point_vector[l].ny);
+      view->setField(pdal::Dimension::Id::NormalZ, l , point_vector[l].nz);
+    }
+ 
+  }
+  catch(const std::exception& e)
+  {
+    logger->error("GlobalMapping::fillView error: {}",e.what());
+    return false;
+  }
+  logger->error("GlobalMapping::fillView points count = {}", point_vector.size());
   return true;
 }
 
