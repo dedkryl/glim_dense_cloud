@@ -90,6 +90,10 @@ public:
   void print_submap_structure();
 
   void based_on_legacy_save_ply(const std::string& path);
+
+  void save_trajectory_ply(const std::string& path);
+  void save_trajectory_text(const std::string& path);
+  
   void another_save_ply(const std::string& path);
   std::vector<Eigen::Vector4d> another_export_points();
   void another_save_ply_extended(const std::string& path);

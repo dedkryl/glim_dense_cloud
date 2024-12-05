@@ -622,9 +622,11 @@ void GlobalMapping::save(const std::string& path) {
   //based_on_legacy_save_ply(path);
   //another_save_ply(path);
   //another_save_ply_extended(path);
-  another_save_las(path); 
-}
+  another_save_las(path);
 
+  save_trajectory_ply(path);
+  //save_trajectory_text(path); 
+}
 
 void GlobalMapping::based_on_legacy_save_ply(const std::string& path)
 {
@@ -635,6 +637,25 @@ void GlobalMapping::based_on_legacy_save_ply(const std::string& path)
   logger->info(std::string("Writing to file : ") + ply_file_name);
   glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
 ////////////////////////////////////////////////////////////////////////  
+}
+
+std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
+ 
+  int num_all_points = 0;
+  for (const auto& submap : submaps) {
+    num_all_points += submap->frame->size();
+  }
+
+  std::vector<Eigen::Vector4d> all_points;
+  all_points.reserve(num_all_points);
+
+  for (const auto& submap : submaps) {
+     std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+      return submap->T_world_origin * p;
+    });
+  }
+
+  return all_points;
 }
 
 
@@ -648,6 +669,37 @@ void GlobalMapping::another_save_ply(const std::string& path)
   glk::save_ply_binary(ply_file_name, exported_points.data(), exported_points.size());
 ////////////////////////////////////////////////////////////////////////  
 }
+
+
+std::vector<Eigen::Vector4d> GlobalMapping::another_export_points()
+{
+  int num_all_points = 0;
+  for (const auto& submap : submaps) {
+    for (const auto& fs : submap->frames) {
+      num_all_points += fs->frame->points->size();
+    }
+  }
+
+  logger->debug("another_export_points num_all_points : {}", num_all_points);
+
+
+  std::vector<Eigen::Vector4d> all_points;
+  all_points.reserve(num_all_points);
+
+  for (const auto& submap : submaps) {
+    for (const auto& fs : submap->frames) {
+      std::transform(fs->frame->points, fs->frame->points + fs->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+        return submap->T_world_origin * p;
+      });
+    }
+  }
+
+  logger->debug("vector<Eigen::Vector4d> all_points size {}", all_points.size());
+  
+
+  return all_points;
+}
+
 
 
 void GlobalMapping::another_save_ply_extended(const std::string& path)
@@ -702,10 +754,21 @@ bool GlobalMapping::fillPLYData(glk::PLYData& ply)
 
         if(!fs->raw_frame->intensities.empty())
         {
+          /*
           for(size_t k = 0; k< fs->frame->size(); k++)
           {
             double sum = std::accumulate(fs->raw_frame->intensities.begin(), fs->raw_frame->intensities.end(), 0);
             ply.intensities.push_back(sum/fs->raw_frame->intensities.size());
+          }
+          */
+          for(size_t k = 0; k< fs->frame->size(); k++)
+          {
+            if(fs->raw_frame->intensities.size() == fs->frame->size())
+            {
+              ply.intensities.push_back(fs->raw_frame->intensities.at(k));
+            }
+            else
+              logger->error("Smth going wrong: frame and intensities have different sizes!");
           }
         }
         else
@@ -761,77 +824,73 @@ bool GlobalMapping::fillPLYData(glk::PLYData& ply)
   return true;
 }
 
-/*
-bool GlobalMapping::fillView(pdal::PointViewPtr view)
+
+void GlobalMapping::another_save_las(const std::string& path)
 {
-  int i = 0;
-  size_t points_counter = 0;//debug
-  try
-  {
-    
-    for (const auto& submap : submaps) {
-      for (const auto& fs : submap->frames) {
-        for(size_t k = 0; k< fs->frame->size(); k++)
-        {
-          view->setField(pdal::Dimension::Id::GpsTime, i + k, fs->raw_frame->stamp); 
-        }
-
-        if(fs->frame->has_points())
-        {
-          for(size_t k = 0; k< fs->frame->size(); k++)
-          {
-            Eigen::Vector4d p = *(fs->frame->points + k);
-            Eigen::Vector4d pp = submap->T_world_origin*p;
-            view->setField(pdal::Dimension::Id::X, i + k, pp[0] );
-            view->setField(pdal::Dimension::Id::Y, i + k, pp[1]);
-            view->setField(pdal::Dimension::Id::Z, i + k, pp[2]);
-            points_counter++;
-          }
-        }
-        else
-          logger->error("Point must have coords");
-
-        if(!fs->raw_frame->intensities.empty())
-        {
-          if(fs->raw_frame->intensities.size() == fs->frame->size())
-          {
-            for(size_t k = 0; k< fs->frame->size(); k++)
-            {
-              view->setField(pdal::Dimension::Id::Intensity, i + k, fs->raw_frame->intensities.at(k));
-            }
-          }
-          else
-            logger->error("Smth going wrong: frame and intensities have different sizes!");
-        }
-        else
-          logger->error("Point must have Intensity");
-
-        if(fs->frame->has_normals())
-        {
-          for(size_t k = 0; k< fs->frame->size(); k++)
-          {
-            Eigen::Vector4d n = *(fs->frame->normals + k);
-            view->setField(pdal::Dimension::Id::NormalX, i + k, n[0]);
-            view->setField(pdal::Dimension::Id::NormalY, i + k, n[1]);
-            view->setField(pdal::Dimension::Id::NormalZ, i + k, n[2]);
-          }
-        }
-        else
-          logger->error("Point must have Normals");
-
-          i++;
-      }
-    }
-  }
-  catch(const std::exception& e)
-  {
-    logger->error("GlobalMapping::fillView error: {}",e.what());
-    return false;
-  }
-  logger->error("GlobalMapping::fillView i = {}, points_counter = {}", i, points_counter);
-  return true;
-}
+/*
+в LAS должны быть все данные
+XYZ, нормали (они же угол излучения), GPS-время, интенсивность
 */
+/*
+PDAL:
+In addition to the X, Y, Z coordinates of a point, PDAL can write many other attributes. Their full
+list and types are in [Dimension.json]. Most of these are not enabled by default. To enable them, the
+LAS file format minor version should be set to 4, the value of the `extra_dims` writer option should be `all`,
+and the attributes should be registered with the function ``registerDim()``.
+
+*/
+
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Another points  save to LAS");
+  //auto exported_points = another_export_points();
+  using namespace pdal;
+  std::string las_file_name = path + "/another_las.las"; 
+  Options options;
+  options.add("filename", las_file_name);
+  options.add("extra_dims", "all");
+  options.add("minor_version", 4);
+
+  PointTable table;
+  table.layout()->registerDim(Dimension::Id::GpsTime);
+  table.layout()->registerDim(Dimension::Id::X);
+  table.layout()->registerDim(Dimension::Id::Y);
+  table.layout()->registerDim(Dimension::Id::Z);
+  table.layout()->registerDim(Dimension::Id::Intensity);
+  table.layout()->registerDim(Dimension::Id::NormalX);
+  table.layout()->registerDim(Dimension::Id::NormalY);
+  table.layout()->registerDim(Dimension::Id::NormalZ);
+
+  logger->info(std::string("Writing to file : ") + las_file_name);
+  PointViewPtr view(new PointView(table));
+  if(!view)
+  {
+    logger->error("Unable to const PointView");
+    return;
+  }
+
+  if(!fillView(view))
+    return;
+
+  BufferReader reader;
+  reader.addView(view);
+
+  StageFactory factory;
+
+  // StageFactory always "owns" stages it creates. They'll be destroyed with the factory.
+  Stage *writer = factory.createStage("writers.las");
+  if(!writer)
+  {
+        std::cout << "Unable to create writer..." << std::endl;
+        return;
+  }
+
+  writer->setInput(reader);
+  writer->setOptions(options);
+  writer->prepare(table);
+  writer->execute(table);
+////////////////////////////////////////////////////////////////////////  
+}
+
 
 
 bool GlobalMapping::fillView(pdal::PointViewPtr view)
@@ -924,99 +983,63 @@ bool GlobalMapping::fillView(pdal::PointViewPtr view)
 }
 
 
-void GlobalMapping::another_save_las(const std::string& path)
+
+
+void GlobalMapping::save_trajectory_text(const std::string& path)
 {
-/*
-в LAS должны быть все данные
-XYZ, нормали (они же угол излучения), GPS-время, интенсивность
-*/
-/*
-PDAL:
-In addition to the X, Y, Z coordinates of a point, PDAL can write many other attributes. Their full
-list and types are in [Dimension.json]. Most of these are not enabled by default. To enable them, the
-LAS file format minor version should be set to 4, the value of the `extra_dims` writer option should be `all`,
-and the attributes should be registered with the function ``registerDim()``.
-
-*/
-
-  //////////////////////////////////////////////////////////////////////
-  logger->info("Another points  save to LAS");
-  //auto exported_points = another_export_points();
-  using namespace pdal;
-  std::string las_file_name = path + "/another_las.las"; 
-  Options options;
-  options.add("filename", las_file_name);
-  options.add("extra_dims", "all");
-  options.add("minor_version", 4);
-
-  PointTable table;
-  table.layout()->registerDim(Dimension::Id::GpsTime);
-  table.layout()->registerDim(Dimension::Id::X);
-  table.layout()->registerDim(Dimension::Id::Y);
-  table.layout()->registerDim(Dimension::Id::Z);
-  table.layout()->registerDim(Dimension::Id::Intensity);
-  table.layout()->registerDim(Dimension::Id::NormalX);
-  table.layout()->registerDim(Dimension::Id::NormalY);
-  table.layout()->registerDim(Dimension::Id::NormalZ);
-
-  logger->info(std::string("Writing to file : ") + las_file_name);
-  PointViewPtr view(new PointView(table));
-  if(!view)
-  {
-    logger->error("Unable to const PointView");
-    return;
+  /*
+  //like traj_imu.txt above
+  logger->info("Save trajectory to TXT");
+  std::ofstream ofs(path + "/trajectory.txt");
+  ofs << boost::format("Timestamp \t X \t Y \t Z") << std::endl;
+  for (int i = 0; i < submaps.size(); i++) {
+    for (const auto& frame : submaps[i]->odom_frames) {
+        const Eigen::Vector3d trans(frame->T_world_imu.translation());
+        ofs << boost::format("%.9f \t %.6f \t %.6f \t %.6f") % frame->stamp % trans.x() % trans.y() % trans.z() << std::endl;
+      }
+   }
+  */
+  //like save_trajectory_ply below
+  logger->info("Save trajectory to TXT");
+  std::vector<Eigen::Vector3f> traj;
+  std::vector<double> times;
+  for (const auto& submap : submaps) {
+    const Eigen::Isometry3d T_world_endpoint_L = submap->T_world_origin * submap->T_origin_endpoint_L;
+    const Eigen::Isometry3d T_odom_imu0 = submap->frames.front()->T_world_imu;
+    for (const auto& frame : submap->frames) {
+      const Eigen::Isometry3d T_world_imu = T_world_endpoint_L * T_odom_imu0.inverse() * frame->T_world_imu;
+      traj.emplace_back(T_world_imu.translation().cast<float>());
+      times.emplace_back(frame->stamp);
+    }
   }
-
-  if(!fillView(view))
-    return;
-
-  BufferReader reader;
-  reader.addView(view);
-
-  StageFactory factory;
-
-  // StageFactory always "owns" stages it creates. They'll be destroyed with the factory.
-  Stage *writer = factory.createStage("writers.las");
-  if(!writer)
-  {
-        std::cout << "Unable to create writer..." << std::endl;
-        return;
-  }
-
-  writer->setInput(reader);
-  writer->setOptions(options);
-  writer->prepare(table);
-  writer->execute(table);
-////////////////////////////////////////////////////////////////////////  
+  
+  std::string txt_file_name = path + "/trajectory.txt"; 
+  logger->info(std::string("Writing to file : ") + txt_file_name);
+  std::ofstream ofs(txt_file_name);
+  ofs << boost::format("Timestamp \t\t X \t\t Y \t\t Z") << std::endl;
+  size_t i = 0;
+  for (auto& t : traj) {
+        ofs << boost::format("%.9f \t %.6f \t %.6f \t %.6f") % times.at(i) % t[0] % t[1] % t[2] << std::endl;
+        i++;
+   }
 }
 
-std::vector<Eigen::Vector4d> GlobalMapping::another_export_points()
+void GlobalMapping::save_trajectory_ply(const std::string& path)
 {
-  int num_all_points = 0;
+  logger->info("Save trajectory to PLY");
+  std::vector<Eigen::Vector3f> traj;
   for (const auto& submap : submaps) {
-    for (const auto& fs : submap->frames) {
-      num_all_points += fs->frame->points->size();
+    const Eigen::Isometry3d T_world_endpoint_L = submap->T_world_origin * submap->T_origin_endpoint_L;
+    const Eigen::Isometry3d T_odom_imu0 = submap->frames.front()->T_world_imu;
+    for (const auto& frame : submap->frames) {
+      const Eigen::Isometry3d T_world_imu = T_world_endpoint_L * T_odom_imu0.inverse() * frame->T_world_imu;
+      traj.emplace_back(T_world_imu.translation().cast<float>());
     }
   }
-
-  logger->debug("another_export_points num_all_points : {}", num_all_points);
-
-
-  std::vector<Eigen::Vector4d> all_points;
-  all_points.reserve(num_all_points);
-
-  for (const auto& submap : submaps) {
-    for (const auto& fs : submap->frames) {
-      std::transform(fs->frame->points, fs->frame->points + fs->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
-        return submap->T_world_origin * p;
-      });
-    }
-  }
-
-  logger->debug("vector<Eigen::Vector4d> all_points size {}", all_points.size());
-  
-
-  return all_points;
+  std::string ply_file_name = path + "/trajectory.ply"; 
+  logger->info(std::string("Writing to file : ") + ply_file_name);
+  glk::save_ply_binary(ply_file_name, traj.data(), traj.size());
+////////////////////////////////////////////////////////////////////////  
 }
 
 
@@ -1167,24 +1190,7 @@ void GlobalMapping::print_submap_structure()
 
 }
 
-std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
- 
-  int num_all_points = 0;
-  for (const auto& submap : submaps) {
-    num_all_points += submap->frame->size();
-  }
 
-  std::vector<Eigen::Vector4d> all_points;
-  all_points.reserve(num_all_points);
-
-  for (const auto& submap : submaps) {
-     std::transform(submap->frame->points, submap->frame->points + submap->frame->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
-      return submap->T_world_origin * p;
-    });
-  }
-
-  return all_points;
-}
 
 bool GlobalMapping::load(const std::string& path) {
   std::ifstream ifs(path + "/graph.txt");
