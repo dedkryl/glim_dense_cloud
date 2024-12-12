@@ -14,6 +14,11 @@ std::vector<Eigen::Vector4d> CloudDeskewing::deskew(
   const Eigen::Vector3d& angular_vel,
   const std::vector<double>& times,
   const std::vector<Eigen::Vector4d>& points) {
+
+  //std::cout <<  points.size() << " points copied, not deskewed (1)" << std::endl;  
+  // Nota Bene : after handlein deskewed.size < points.size   
+  //std::vector<Eigen::Vector4d> deskewed = points;
+  
   if (times.empty()) {
     return std::vector<Eigen::Vector4d>();
   }
@@ -48,8 +53,9 @@ std::vector<Eigen::Vector4d> CloudDeskewing::deskew(
     const auto& T_l0_l1 = T_lidar0_lidar1[time_indices[i]];
     deskewed[i] = T_l0_l1 * points[i];
   }
-
+  
   return deskewed;
+  
 }
 
 std::vector<Eigen::Vector4d> CloudDeskewing::deskew(
@@ -60,6 +66,12 @@ std::vector<Eigen::Vector4d> CloudDeskewing::deskew(
   const std::vector<double>& times,
   const std::vector<Eigen::Vector4d>& points) {
   //
+  //std::cout <<  points.size() << " points copied, not deskewed (2)" << std::endl;  
+
+  //!!!!!!!!!!!!!!!! // Nota Bene : after handling deskewed.size < points.size
+
+  //std::vector<Eigen::Vector4d> deskewed = points;
+  
   if (times.empty()) {
     return std::vector<Eigen::Vector4d>();
   }
@@ -130,6 +142,7 @@ std::vector<Eigen::Vector4d> CloudDeskewing::deskew(
   }
 
   return deskewed;
+  
 }
 
 }  // namespace glim

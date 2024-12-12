@@ -26,10 +26,10 @@ public:
   void drop_frame_points();
 
   /// @brief Get the origin frame
-  EstimationFrame::ConstPtr origin_frame() const { return frames[frames.size() / 2]; }
+  EstimationFrame::ConstPtr optim_odom_frame() const { return optim_odom_frames[optim_odom_frames.size() / 2]; }
 
   /// @brief Get the origin odometry frame
-  EstimationFrame::ConstPtr origin_odom_frame() const { return odom_frames[frames.size() / 2]; }
+  EstimationFrame::ConstPtr origin_odom_frame() const { return origin_odom_frames[optim_odom_frames.size() / 2]; }
 
   /**
    * @brief Get the custom data and cast it to the specified type.
@@ -82,11 +82,11 @@ public:
   Eigen::Isometry3d T_origin_endpoint_L;  ///< frame.front() pose w.r.t. the origin
   Eigen::Isometry3d T_origin_endpoint_R;  ///< frame.back() pose w.r.t. the origin
 
-  gtsam_points::PointCloud::Ptr frame;                         ///< Merged submap frame
+  gtsam_points::PointCloud::Ptr merged_keyframe;                         ///< Merged keyframes in submap frame , deskewed
   std::vector<gtsam_points::GaussianVoxelMap::Ptr> voxelmaps;  ///< Multi-resolution voxelmaps
 
-  std::vector<EstimationFrame::ConstPtr> frames;       ///< Optimized odometry frames
-  std::vector<EstimationFrame::ConstPtr> odom_frames;  ///< Original odometry frames
+  std::vector<EstimationFrame::ConstPtr> optim_odom_frames;       ///< Optimized odometry frames, not deskewed
+  std::vector<EstimationFrame::ConstPtr> origin_odom_frames;  ///< Original odometry frames, not deskewed
 
   std::unordered_map<std::string, std::shared_ptr<void>> custom_data;  ///< User-defined custom data
 };

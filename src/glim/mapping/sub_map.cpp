@@ -11,11 +11,11 @@
 namespace glim {
 
 void SubMap::drop_frame_points() {
-  for (auto& frame : frames) {
+  for (auto& frame : optim_odom_frames) {
     frame = frame->clone_wo_points();
   }
 
-  for (auto& frame : odom_frames) {
+  for (auto& frame : origin_odom_frames) {
     frame = frame->clone_wo_points();
   }
 }
@@ -28,25 +28,25 @@ void SubMap::save(const std::string& path) const {
   ofs << "T_origin_endpoint_L: " << std::endl << T_origin_endpoint_L.matrix() << std::endl;
   ofs << "T_origin_endpoint_R: " << std::endl << T_origin_endpoint_R.matrix() << std::endl;
 
-  if (!frames.empty()) {
-    ofs << "T_lidar_imu: " << std::endl << frames.back()->T_lidar_imu.matrix() << std::endl;
-    ofs << "imu_bias: " << frames.back()->imu_bias.transpose() << std::endl;
-    ofs << "frame_id: " << static_cast<int>(frames.back()->frame_id) << std::endl;
+  if (!optim_odom_frames.empty()) {
+    ofs << "T_lidar_imu: " << std::endl << optim_odom_frames.back()->T_lidar_imu.matrix() << std::endl;
+    ofs << "imu_bias: " << optim_odom_frames.back()->imu_bias.transpose() << std::endl;
+    ofs << "frame_id: " << static_cast<int>(optim_odom_frames.back()->frame_id) << std::endl;
   }
 
-  ofs << "num_frames: " << frames.size() << std::endl;
+  ofs << "num_frames: " << optim_odom_frames.size() << std::endl;
 
-  for (int i = 0; i < frames.size(); i++) {
+  for (int i = 0; i < optim_odom_frames.size(); i++) {
     ofs << "frame_" << i << std::endl;
-    ofs << "id: " << frames[i]->id << std::endl;
-    ofs << "stamp: " << boost::format("%.9f") % frames[i]->stamp << std::endl;
-    ofs << "T_odom_lidar: " << std::endl << odom_frames[i]->T_world_lidar.matrix() << std::endl;
-    ofs << "T_world_lidar: " << std::endl << frames[i]->T_world_lidar.matrix() << std::endl;
-    ofs << "v_world_imu: " << frames[i]->v_world_imu.transpose() << std::endl;
+    ofs << "id: " << optim_odom_frames[i]->id << std::endl;
+    ofs << "stamp: " << boost::format("%.9f") % optim_odom_frames[i]->stamp << std::endl;
+    ofs << "T_odom_lidar: " << std::endl << origin_odom_frames[i]->T_world_lidar.matrix() << std::endl;
+    ofs << "T_world_lidar: " << std::endl << optim_odom_frames[i]->T_world_lidar.matrix() << std::endl;
+    ofs << "v_world_imu: " << optim_odom_frames[i]->v_world_imu.transpose() << std::endl;
   }
 
   std::ofstream ofs_imu_rate(path + "/imu_rate.txt");
-  for (const auto& frame : frames) {
+  for (const auto& frame : optim_odom_frames) {
     if (!frame->imu_rate_trajectory.size()) {
       continue;
     }
@@ -57,7 +57,7 @@ void SubMap::save(const std::string& path) const {
     }
   }
 
-  frame->save_compact(path);
+  merged_keyframe->save_compact(path);
 }
 
 namespace {
@@ -134,11 +134,11 @@ SubMap::Ptr SubMap::load(const std::string& path) {
     odom_frame->T_world_lidar = T_odom_lidar;
     odom_frame->T_world_imu = T_odom_lidar * T_lidar_imu;
 
-    submap->frames.push_back(frame);
-    submap->odom_frames.push_back(odom_frame);
+    submap->optim_odom_frames.push_back(frame);
+    submap->origin_odom_frames.push_back(odom_frame);
   }
 
-  submap->frame = gtsam_points::PointCloudCPU::load(path);
+  submap->merged_keyframe = gtsam_points::PointCloudCPU::load(path);
 
   return submap;
 }

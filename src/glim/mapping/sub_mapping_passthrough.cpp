@@ -140,16 +140,16 @@ SubMap::Ptr SubMappingPassthrough::create_submap(bool force_create) const {
   submap->T_origin_endpoint_L = submap->T_world_origin.inverse() * odom_frames.front()->T_world_sensor();
   submap->T_origin_endpoint_R = submap->T_world_origin.inverse() * odom_frames.back()->T_world_sensor();
 
-  submap->odom_frames = odom_frames;
-  submap->frames = odom_frames;
+  submap->origin_odom_frames = odom_frames;
+  submap->optim_odom_frames = odom_frames;
 
   auto merged = voxelmap->voxel_data();
-  submap->frame = gtsam_points::transform(merged, submap->T_world_origin.inverse());
+  submap->merged_keyframe = gtsam_points::transform(merged, submap->T_world_origin.inverse());
 
-  if (params.submap_target_num_points > 0 && submap->frame->size() > params.submap_target_num_points) {
-    std::mt19937 mt(submap_count * 643145 + submap->frame->size() * 4312);  // Just a random-like seed
-    submap->frame = gtsam_points::random_sampling(submap->frame, static_cast<double>(params.submap_target_num_points) / submap->frame->size(), mt);
-    logger->debug("|subsampled_submap|={}", submap->frame->size());
+  if (params.submap_target_num_points > 0 && submap->merged_keyframe->size() > params.submap_target_num_points) {
+    std::mt19937 mt(submap_count * 643145 + submap->merged_keyframe->size() * 4312);  // Just a random-like seed
+    submap->merged_keyframe = gtsam_points::random_sampling(submap->merged_keyframe, static_cast<double>(params.submap_target_num_points) / submap->merged_keyframe->size(), mt);
+    logger->debug("|subsampled_submap|={}", submap->merged_keyframe->size());
   }
 
   return submap;

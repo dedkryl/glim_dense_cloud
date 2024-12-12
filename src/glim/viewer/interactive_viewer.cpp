@@ -258,10 +258,10 @@ void InteractiveViewer::context_menu() {
     if (type == PickType::FRAME) {
       const int frame_id = right_clicked_info[3];
       if (ImGui::MenuItem("Loop begin")) {
-        manual_loop_close_modal->set_target(X(frame_id), submaps[frame_id]->frame, submap_poses[frame_id]);
+        manual_loop_close_modal->set_target(X(frame_id), submaps[frame_id]->merged_keyframe, submap_poses[frame_id]);
       }
       if (ImGui::MenuItem("Loop end")) {
-        manual_loop_close_modal->set_source(X(frame_id), submaps[frame_id]->frame, submap_poses[frame_id]);
+        manual_loop_close_modal->set_source(X(frame_id), submaps[frame_id]->merged_keyframe, submap_poses[frame_id]);
       }
     }
 
@@ -311,7 +311,7 @@ void InteractiveViewer::update_viewer() {
       drawable.first->add("model_matrix", submap_pose.matrix());
     } else {
       const Eigen::Vector4i info(static_cast<int>(PickType::POINTS), 0, 0, submap->id);
-      auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->frame->points, submap->frame->size());
+      auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->merged_keyframe->points, submap->merged_keyframe->size());
       auto shader_setting = guik::Rainbow(submap_pose).add("info_values", info).set_alpha(points_alpha);
 
       if (enable_partial_rendering) {
@@ -390,8 +390,8 @@ void InteractiveViewer::update_viewer() {
   std::vector<Eigen::Vector3f> traj;
   for (const auto& submap : submaps) {
     const Eigen::Isometry3d T_world_endpoint_L = submap->T_world_origin * submap->T_origin_endpoint_L;
-    const Eigen::Isometry3d T_odom_imu0 = submap->frames.front()->T_world_imu;
-    for (const auto& frame : submap->frames) {
+    const Eigen::Isometry3d T_odom_imu0 = submap->optim_odom_frames.front()->T_world_imu;
+    for (const auto& frame : submap->optim_odom_frames) {
       const Eigen::Isometry3d T_world_imu = T_world_endpoint_L * T_odom_imu0.inverse() * frame->T_world_imu;
       traj.emplace_back(T_world_imu.translation().cast<float>());
     }
@@ -419,7 +419,7 @@ void InteractiveViewer::odometry_on_new_frame(const EstimationFrame::ConstPtr& n
 void InteractiveViewer::globalmap_on_insert_submap(const SubMap::ConstPtr& submap) {
   std::shared_ptr<Eigen::Isometry3d> pose(new Eigen::Isometry3d(submap->T_world_origin));
   invoke([this, submap, pose] {
-    trajectory->update_anchor(submap->frames[submap->frames.size() / 2]->stamp, submap->T_world_origin);
+    trajectory->update_anchor(submap->optim_odom_frames[submap->optim_odom_frames.size() / 2]->stamp, submap->T_world_origin);
 
     submap_poses.push_back(*pose);
     submaps.push_back(submap);

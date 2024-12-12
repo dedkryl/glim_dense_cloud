@@ -507,12 +507,12 @@ void StandardViewer::set_callbacks() {
     const std::shared_ptr<Eigen::Isometry3d> T_world_origin(new Eigen::Isometry3d(submap->T_world_origin));
 
     invoke([this, submap, T_world_origin] {
-      const double stamp_endpoint_R = submap->odom_frames.back()->stamp;
+      const double stamp_endpoint_R = submap->origin_odom_frames.back()->stamp;
       const Eigen::Isometry3d T_world_endpoint_R = (*T_world_origin) * submap->T_origin_endpoint_R;
       trajectory->update_anchor(stamp_endpoint_R, T_world_endpoint_R);
 
       auto viewer = guik::LightViewer::instance();
-      auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->frame->points, submap->frame->size());
+      auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->merged_keyframe->points, submap->merged_keyframe->size());
       auto shader_setting = guik::Rainbow(T_world_origin->matrix().cast<float>());
       shader_setting.set_alpha(points_alpha);
 

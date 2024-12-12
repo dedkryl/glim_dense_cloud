@@ -360,6 +360,7 @@ void SubMapping::insert_keyframe(const int current, const EstimationFrame::Const
       imu_pred_poses[i].linear() = Eigen::Quaterniond(imu[7], imu[4], imu[5], imu[6]).toRotationMatrix();
     }
 
+    logger->warn("deskewing->deskew in SubMapping::insert_keyframe");
     auto deskewed =
       deskewing
         ->deskew(odom_frame->T_lidar_imu.inverse(), imu_pred_times, imu_pred_poses, odom_frame->raw_frame->stamp, odom_frame->raw_frame->times, odom_frame->raw_frame->points);
@@ -452,8 +453,8 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
   submap->T_origin_endpoint_L = submap->T_world_origin.inverse() * Eigen::Isometry3d(values->at<gtsam::Pose3>(X(0)).matrix());
   submap->T_origin_endpoint_R = submap->T_world_origin.inverse() * Eigen::Isometry3d(values->at<gtsam::Pose3>(X(odom_frames.size() - 1)).matrix());
 
-  submap->odom_frames = odom_frames;
-  submap->frames.resize(odom_frames.size());
+  submap->origin_odom_frames = odom_frames;
+  submap->optim_odom_frames.resize(odom_frames.size());
   for (int i = 0; i < odom_frames.size(); i++) {
     EstimationFrame::Ptr frame(new EstimationFrame);
     *frame = *odom_frames[i];
@@ -466,7 +467,7 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
       frame->imu_bias = values->at<gtsam::imuBias::ConstantBias>(B(i)).vector();
     }
 
-    submap->frames[i] = frame;
+    submap->optim_odom_frames[i] = frame;
   }
 
   logger->debug("merge frames");
@@ -484,15 +485,15 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
   }
 #endif
 
-  if (submap->frame == nullptr) {
-    submap->frame = gtsam_points::merge_frames_auto(poses_to_merge, keyframes_to_merge, params.submap_downsample_resolution);
+  if (submap->merged_keyframe == nullptr) {
+    submap->merged_keyframe = gtsam_points::merge_frames_auto(poses_to_merge, keyframes_to_merge, params.submap_downsample_resolution);
   }
-  logger->debug("|merged_submap|={}", submap->frame->size());
+  logger->debug("|merged_submap|={}", submap->merged_keyframe->size());
 
-  if (params.submap_target_num_points > 0 && submap->frame->size() > params.submap_target_num_points) {
-    std::mt19937 mt(submap_count * 643145 + submap->frame->size() * 4312);  // Just a random-like seed
-    submap->frame = gtsam_points::random_sampling(submap->frame, static_cast<double>(params.submap_target_num_points) / submap->frame->size(), mt);
-    logger->debug("|subsampled_submap|={}", submap->frame->size());
+  if (params.submap_target_num_points > 0 && submap->merged_keyframe->size() > params.submap_target_num_points) {
+    std::mt19937 mt(submap_count * 643145 + submap->merged_keyframe->size() * 4312);  // Just a random-like seed
+    submap->merged_keyframe = gtsam_points::random_sampling(submap->merged_keyframe, static_cast<double>(params.submap_target_num_points) / submap->merged_keyframe->size(), mt);
+    logger->debug("|subsampled_submap|={}", submap->merged_keyframe->size());
   }
 
   return submap;

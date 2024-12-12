@@ -182,10 +182,10 @@ EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame(const Preprocessed
     frame->add_normals(normals);
     new_frame->frame = frame;
     new_frame->frame_id = FrameID::IMU;
-    create_frame(new_frame);
+    create_frame(new_frame);//empty func, overrided for OdometryEstimationGPU only
 
     Callbacks::on_new_frame(new_frame);
-    frames.push_back(new_frame);
+    frames.push_back(new_frame);//this std::vector<EstimationFrame::Ptr>
 
     // Initialize the estimator
     gtsam::Values new_values;
@@ -288,6 +288,7 @@ EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame(const Preprocessed
   }
 
   // Deskew and tranform points into IMU frame
+  logger->warn("deskewing->deskew in OdometryEstimationIMU::insert_frame");
   auto deskewed = deskewing->deskew(T_imu_lidar, pred_imu_times, pred_imu_poses, raw_frame->stamp, raw_frame->times, raw_frame->points);
   for (auto& pt : deskewed) {
     pt = T_imu_lidar * pt;
@@ -302,7 +303,7 @@ EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame(const Preprocessed
   frame->add_normals(deskewed_normals);
   new_frame->frame = frame;
   new_frame->frame_id = FrameID::IMU;
-  create_frame(new_frame);
+  create_frame(new_frame);//empty func, overrided for OdometryEstimationGPU only
 
   Callbacks::on_new_frame(new_frame);
   frames.push_back(new_frame);

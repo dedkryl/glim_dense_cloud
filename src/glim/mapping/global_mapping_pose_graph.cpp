@@ -116,7 +116,7 @@ void GlobalMappingPoseGraph::insert_submap(const SubMap::Ptr& submap) {
 
     const Eigen::Isometry3d T_origin0_endpointR0 = submaps[last]->T_origin_endpoint_R;
     const Eigen::Isometry3d T_origin1_endpointL1 = submaps[current]->T_origin_endpoint_L;
-    const Eigen::Isometry3d T_endpointR0_endpointL1 = submaps[last]->odom_frames.back()->T_world_sensor().inverse() * submaps[current]->odom_frames.front()->T_world_sensor();
+    const Eigen::Isometry3d T_endpointR0_endpointL1 = submaps[last]->origin_odom_frames.back()->T_world_sensor().inverse() * submaps[current]->origin_odom_frames.front()->T_world_sensor();
     const Eigen::Isometry3d T_origin0_origin1 = T_origin0_endpointR0 * T_endpointR0_endpointL1 * T_origin1_endpointL1.inverse();
 
     current_T_world_submap = last_T_world_submap * gtsam::Pose3(T_origin0_origin1.matrix());
@@ -205,7 +205,7 @@ void GlobalMappingPoseGraph::save(const std::string& path) {
 
   std::ofstream ofs(path + "/graph.txt");
   ofs << "num_submaps: " << submaps.size() << std::endl;
-  ofs << "num_all_frames: " << std::accumulate(submaps.begin(), submaps.end(), 0, [](int sum, const SubMap::ConstPtr& submap) { return sum + submap->frames.size(); }) << std::endl;
+  ofs << "num_all_frames: " << std::accumulate(submaps.begin(), submaps.end(), 0, [](int sum, const SubMap::ConstPtr& submap) { return sum + submap->optim_odom_frames.size(); }) << std::endl;
 
   ofs << "num_matching_cost_factors: " << 0 << std::endl;
 
@@ -222,16 +222,16 @@ void GlobalMappingPoseGraph::save(const std::string& path) {
   };
 
   for (int i = 0; i < submaps.size(); i++) {
-    for (const auto& frame : submaps[i]->odom_frames) {
+    for (const auto& frame : submaps[i]->origin_odom_frames) {
       write_tum_frame(odom_lidar_ofs, frame->stamp, frame->T_world_lidar);
       write_tum_frame(odom_imu_ofs, frame->stamp, frame->T_world_imu);
     }
 
     const Eigen::Isometry3d T_world_endpoint_L = submaps[i]->T_world_origin * submaps[i]->T_origin_endpoint_L;
-    const Eigen::Isometry3d T_odom_lidar0 = submaps[i]->frames.front()->T_world_lidar;
-    const Eigen::Isometry3d T_odom_imu0 = submaps[i]->frames.front()->T_world_imu;
+    const Eigen::Isometry3d T_odom_lidar0 = submaps[i]->optim_odom_frames.front()->T_world_lidar;
+    const Eigen::Isometry3d T_odom_imu0 = submaps[i]->optim_odom_frames.front()->T_world_imu;
 
-    for (const auto& frame : submaps[i]->frames) {
+    for (const auto& frame : submaps[i]->optim_odom_frames) {
       const Eigen::Isometry3d T_world_imu = T_world_endpoint_L * T_odom_imu0.inverse() * frame->T_world_imu;
       const Eigen::Isometry3d T_world_lidar = T_world_imu * frame->T_lidar_imu.inverse();
 
@@ -259,21 +259,21 @@ void GlobalMappingPoseGraph::insert_submap(int current, const SubMap::Ptr& subma
 
   // Subsample points for registration
   if (params.subsample_target > 0) {
-    target->subsampled = gtsam_points::random_sampling(submap->frame, static_cast<double>(params.subsample_target) / submap->frame->size(), mt);
+    target->subsampled = gtsam_points::random_sampling(submap->merged_keyframe, static_cast<double>(params.subsample_target) / submap->merged_keyframe->size(), mt);
   } else {
     if (params.subsample_rate > 0.99) {
-      target->subsampled = submap->frame;
+      target->subsampled = submap->merged_keyframe;
     } else {
-      target->subsampled = gtsam_points::random_sampling(submap->frame, params.subsample_rate, mt);
+      target->subsampled = gtsam_points::random_sampling(submap->merged_keyframe, params.subsample_rate, mt);
     }
   }
 
   // Create nearest neighbor search
   if (params.registration_type == "GICP") {
-    target->tree = std::make_shared<gtsam_points::KdTree>(submap->frame->points, submap->frame->size());
+    target->tree = std::make_shared<gtsam_points::KdTree>(submap->merged_keyframe->points, submap->merged_keyframe->size());
   } else if (params.registration_type == "VGICP") {
     target->voxels = std::make_shared<gtsam_points::GaussianVoxelMapCPU>(params.vgicp_voxel_resolution);
-    target->voxels->insert(*submap->frame);
+    target->voxels->insert(*submap->merged_keyframe);
   } else {
     logger->warn("unknown registration type: {}", params.registration_type);
   }
@@ -295,7 +295,7 @@ boost::shared_ptr<gtsam::NonlinearFactorGraph> GlobalMappingPoseGraph::create_od
   }
 
   const int last = current - 1;
-  const gtsam::Pose3 T_last_current = gtsam::Pose3((submaps[last]->origin_frame()->T_world_sensor().inverse() * submaps[current]->origin_frame()->T_world_sensor()).matrix());
+  const gtsam::Pose3 T_last_current = gtsam::Pose3((submaps[last]->optim_odom_frame()->T_world_sensor().inverse() * submaps[current]->optim_odom_frame()->T_world_sensor()).matrix());
   factors->emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(X(last), X(current), T_last_current, gtsam::noiseModel::Isotropic::Sigma(6, params.odom_factor_stddev));
 
   return factors;
@@ -389,7 +389,7 @@ void GlobalMappingPoseGraph::loop_detection_task() {
 
       if (params.registration_type == "GICP") {
         auto factor =
-          gtsam::make_shared<gtsam_points::IntegratedGICPFactor>(gtsam::Pose3(), 0, candidate.target->submap->frame, candidate.source->subsampled, candidate.target->tree);
+          gtsam::make_shared<gtsam_points::IntegratedGICPFactor>(gtsam::Pose3(), 0, candidate.target->submap->merged_keyframe, candidate.source->subsampled, candidate.target->tree);
         factor->set_max_correspondence_distance(params.gicp_max_correspondence_dist);
 
         gtsam::NonlinearFactorGraph graph;

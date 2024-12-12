@@ -46,7 +46,7 @@ void BundleAdjustmentModal::set_frames(const std::vector<SubMap::ConstPtr>& subm
 
     this->submaps.push_back(submaps[i]);
     this->submap_poses.push_back(Eigen::Translation3d(-center) * submap_poses[i]);
-    this->submap_drawables.push_back(std::make_shared<glk::PointCloudBuffer>(submaps[i]->frame->points, submaps[i]->frame->size()));
+    this->submap_drawables.push_back(std::make_shared<glk::PointCloudBuffer>(submaps[i]->merged_keyframe->points, submaps[i]->merged_keyframe->size()));
   }
 
   this->radius = 1.0f;
@@ -146,7 +146,7 @@ std::vector<std::pair<int, int>> BundleAdjustmentModal::extract_points(double ra
 
   for (int i = 0; i < submaps.size(); i++) {
     const int submap_id = submaps[i]->id;
-    const auto& frame = submaps[i]->frame;
+    const auto& frame = submaps[i]->merged_keyframe;
 
     for (int j = 0; j < frame->size(); j++) {
       Eigen::Vector4d pt = submap_poses[i] * frame->points[j];
@@ -168,7 +168,7 @@ Eigen::Vector3d BundleAdjustmentModal::calc_eigenvalues(const std::vector<std::p
     const int submap_index = submap_point.first;
     const int point_index = submap_point.second;
 
-    const Eigen::Vector4d pt = submap_poses[submap_index] * submaps[submap_index]->frame->points[point_index];
+    const Eigen::Vector4d pt = submap_poses[submap_index] * submaps[submap_index]->merged_keyframe->points[point_index];
 
     sum_pts += pt;
     sum_cross += pt * pt.transpose();
@@ -236,7 +236,7 @@ gtsam::NonlinearFactor::shared_ptr BundleAdjustmentModal::create_factor() {
     const int submap_index = submap_point.first;
     const int point_index = submap_point.second;
 
-    const auto& point = submaps[submap_index]->frame->points[point_index];
+    const auto& point = submaps[submap_index]->merged_keyframe->points[point_index];
 
     factor->add(point.head<3>(), X(submaps[submap_index]->id));
   }
