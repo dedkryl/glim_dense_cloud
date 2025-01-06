@@ -147,7 +147,23 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
     auto arena = static_cast<tbb::task_arena*>(this->tbb_task_arena.get());
     arena->execute([&] {
 #endif
-      values = gtsam::LevenbergMarquardtOptimizer(graph, values, lm_params).optimize();
+      try
+      {
+          logger->warn("LevenbergMarquardtOptimizer before .optimize()");
+          values = gtsam::LevenbergMarquardtOptimizer(graph, values, lm_params).optimize();
+          logger->warn("LevenbergMarquardtOptimizer after");
+      } catch (const gtsam::IndeterminantLinearSystemException& e) {
+            logger->error("SubMapping::insert_frame --> LevenbergMarquardtOptimizer optimize() exception!");
+            logger->error(e.what());
+///////////////////////////////
+            logger->error("I dont know how to handle this --> terminate process!");
+            exit(1);
+///////////////////////////////    
+        
+      } catch (const std::exception& e) {
+        logger->error("an exception was caught during LevenbergMarquardtOptimizer optimize()");
+        logger->error(e.what());
+      }
 #ifdef GTSAM_USE_TBB
     });
 #endif
@@ -169,6 +185,32 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
     }
   }
 #endif
+/////////////////////////
+/*
+    std::vector<double> imu_pred_times(odom_frame->imu_rate_trajectory.cols());
+    std::vector<Eigen::Isometry3d> imu_pred_poses(odom_frame->imu_rate_trajectory.cols());
+    for (int i = 0; i < odom_frame->imu_rate_trajectory.cols(); i++) {
+      const Eigen::Matrix<double, 8, 1> imu = odom_frame->imu_rate_trajectory.col(i).transpose();
+      imu_pred_times[i] = imu[0];
+      imu_pred_poses[i].setIdentity();
+      imu_pred_poses[i].translation() << imu[1], imu[2], imu[3];
+      imu_pred_poses[i].linear() = Eigen::Quaterniond(imu[7], imu[4], imu[5], imu[6]).toRotationMatrix();
+    }
+
+    logger->warn("deskewing->deskew in SubMapping::insert_frame");
+    auto deskewed =
+      deskewing
+        ->deskew(odom_frame->T_lidar_imu.inverse(), imu_pred_times, imu_pred_poses, odom_frame->raw_frame->stamp, odom_frame->raw_frame->times, odom_frame->raw_frame->points);
+
+    auto frame = std::make_shared<gtsam_points::PointCloudCPU>(deskewed);
+    for (int i = 0; i < frame->size(); i++) {
+      frame->points[i] = odom_frame->T_lidar_imu.inverse() * frame->points[i];
+    }
+    frame->add_covs(covariance_estimation->estimate(frame->points_storage, odom_frame->raw_frame->neighbors));
+
+    odom_frame->frame = frame;
+*/
+/////////////////////////////
 
   const int current = odom_frames.size();
   const int last = current - 1;
@@ -269,6 +311,7 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
   if (insert_as_keyframe) {
     logger->debug("insert frame as keyframe");
     insert_keyframe(current, odom_frame);
+    logger->debug("insert frame as keyframe-> inserted");
     Callbacks::on_new_keyframe(current, keyframes.back());
 
     // Create registration error factors (fully connected)
@@ -376,7 +419,9 @@ void SubMapping::insert_keyframe(const int current, const EstimationFrame::Const
 
   // Random sampling for registration error factors
   gtsam_points::PointCloud::Ptr subsampled_frame = gtsam_points::random_sampling(deskewed_frame, params.keyframe_randomsampling_rate, mt);
-
+  
+  logger->warn("SubMapping::insert_keyframe subsampled_frame ready");
+  
   EstimationFrame::Ptr keyframe(new EstimationFrame);
   *keyframe = *odom_frame;
 
@@ -406,6 +451,8 @@ void SubMapping::insert_keyframe(const int current, const EstimationFrame::Const
 
     keyframe->frame = subsampled_frame;
   }
+
+  logger->warn("SubMapping::insert_keyframe before keyframes.push_back()");
 
   keyframes.push_back(keyframe);
   keyframe_indices.push_back(current);

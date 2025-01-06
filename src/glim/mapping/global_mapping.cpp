@@ -489,8 +489,12 @@ gtsam_points::ISAM2ResultExt GlobalMapping::update_isam2(const gtsam::NonlinearF
     });
 #endif
   } catch (const gtsam::IndeterminantLinearSystemException& e) {
-    logger->error("an indeterminant lienar system exception was caught during global map optimization!!");
+    logger->error("GlobalMapping::update_isam2 --> isam2->update Exception : an indeterminant linear system exception was caught during global map optimization!!");
     logger->error(e.what());
+///////////////////////////////
+    logger->error("Prevent cycle: NOT reset isam2 --> terminate process!");
+    exit(1);
+///////////////////////////////    
     indeterminant_nearby_key = e.nearbyVariable();
   } catch (const std::exception& e) {
     logger->error("an exception was caught during global map optimization!!");
@@ -619,12 +623,13 @@ void GlobalMapping::save(const std::string& path) {
   logger->info("saving config");
   GlobalConfig::instance()->dump(path + "/config");
   //if
-  //based_on_legacy_save_ply(path);
+  based_on_legacy_save_ply(path);
   //another_save_ply(path);
+  //another_save_ply_thicker(path);
   //another_save_ply_extended(path);
-  another_save_las(path);
+  //another_save_las(path);
 
-  save_trajectory_ply(path);
+  //save_trajectory_ply(path);
   //save_trajectory_text(path); 
 }
 
@@ -842,7 +847,6 @@ and the attributes should be registered with the function ``registerDim()``.
 
   //////////////////////////////////////////////////////////////////////
   logger->info("Another points  save to LAS");
-  //auto exported_points = another_export_points();
   using namespace pdal;
   std::string las_file_name = path + "/another_las.las"; 
   Options options;

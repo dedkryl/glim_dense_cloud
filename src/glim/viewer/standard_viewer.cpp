@@ -122,6 +122,7 @@ void StandardViewer::set_callbacks() {
     invoke([this, frame, T_odom_lidar] {
       auto viewer = guik::LightViewer::instance();
       auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(frame->points);
+      //auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>((Eigen::Vector4d*)nullptr,0);
       viewer->update_drawable("initialization_frame_" + guik::anon(), cloud_buffer, guik::FlatBlue(*T_odom_lidar));
       viewer->update_drawable("initialization_frame_current", cloud_buffer, guik::FlatOrange(*T_odom_lidar).set_point_scale(2.0f));
     });
@@ -149,7 +150,8 @@ void StandardViewer::set_callbacks() {
     invoke([this, new_frame] {
       auto viewer = guik::LightViewer::instance();
       auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(new_frame->frame->points, new_frame->frame->size());
-
+      //auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>((Eigen::Vector4d*)nullptr,0);
+      
       last_id = new_frame->id;
       last_num_points = new_frame->frame->size();
       if (new_frame->raw_frame && new_frame->raw_frame->size()) {
@@ -245,6 +247,7 @@ void StandardViewer::set_callbacks() {
         auto drawable = viewer->find_drawable(name);
         if (drawable.first == nullptr) {
           auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(keyframe->frame->points, keyframe->frame->size());
+          //auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>((Eigen::Vector4d*)nullptr,0);
           viewer->update_drawable(name, cloud_buffer, guik::Rainbow(pose));
         } else {
           drawable.first->add("model_matrix", pose.matrix());
@@ -418,6 +421,7 @@ void StandardViewer::set_callbacks() {
 
       const Eigen::Vector4f color = glk::colormap_categoricalf(glk::COLORMAP::TURBO, id, 16);
       const auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(frame->points, frame->size());
+      //auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>((Eigen::Vector4d*)nullptr,0);
 
       guik::FlatColor shader_setting(color);
       if (id == 0) {
@@ -513,6 +517,7 @@ void StandardViewer::set_callbacks() {
 
       auto viewer = guik::LightViewer::instance();
       auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>(submap->merged_keyframe->points, submap->merged_keyframe->size());
+      //auto cloud_buffer = std::make_shared<glk::PointCloudBuffer>((Eigen::Vector4d*)nullptr,0);
       auto shader_setting = guik::Rainbow(T_world_origin->matrix().cast<float>());
       shader_setting.set_alpha(points_alpha);
 
