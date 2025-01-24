@@ -83,6 +83,9 @@ public:
   Eigen::Isometry3d T_origin_endpoint_R;  ///< frame.back() pose w.r.t. the origin
 
   gtsam_points::PointCloud::Ptr merged_keyframe;                         ///< Merged keyframes in submap frame , deskewed
+  ////////////
+  std::vector<double> stamps_to_merge;
+  ////////////
   std::vector<gtsam_points::GaussianVoxelMap::Ptr> voxelmaps;  ///< Multi-resolution voxelmaps
 
   std::vector<EstimationFrame::ConstPtr> optim_odom_frames;       ///< Optimized odometry frames, not deskewed

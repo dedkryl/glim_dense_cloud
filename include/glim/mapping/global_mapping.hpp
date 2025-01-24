@@ -86,10 +86,12 @@ public:
 
   virtual void save(const std::string& path) override;
   virtual std::vector<Eigen::Vector4d> export_points() override;
+  void export_points_for_las(std::vector<Eigen::Vector4d>&, std::vector<double>&);
   //debug only
   void print_submap_structure();
 
   void based_on_legacy_save_ply(const std::string& path);
+  void based_on_legacy_save_las(const std::string& path);
 
   void save_trajectory_ply(const std::string& path);
   void save_trajectory_text(const std::string& path);
@@ -101,6 +103,7 @@ public:
 
    void another_save_las(const std::string& path);
    bool fillView(pdal::PointViewPtr view);  
+   bool fillViewTimesPointsLas(pdal::PointViewPtr view);  
 
   /**
    * @brief Load a mapping result from a dumped directory

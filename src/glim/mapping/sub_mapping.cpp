@@ -185,32 +185,6 @@ void SubMapping::insert_frame(const EstimationFrame::ConstPtr& odom_frame_) {
     }
   }
 #endif
-/////////////////////////
-/*
-    std::vector<double> imu_pred_times(odom_frame->imu_rate_trajectory.cols());
-    std::vector<Eigen::Isometry3d> imu_pred_poses(odom_frame->imu_rate_trajectory.cols());
-    for (int i = 0; i < odom_frame->imu_rate_trajectory.cols(); i++) {
-      const Eigen::Matrix<double, 8, 1> imu = odom_frame->imu_rate_trajectory.col(i).transpose();
-      imu_pred_times[i] = imu[0];
-      imu_pred_poses[i].setIdentity();
-      imu_pred_poses[i].translation() << imu[1], imu[2], imu[3];
-      imu_pred_poses[i].linear() = Eigen::Quaterniond(imu[7], imu[4], imu[5], imu[6]).toRotationMatrix();
-    }
-
-    logger->warn("deskewing->deskew in SubMapping::insert_frame");
-    auto deskewed =
-      deskewing
-        ->deskew(odom_frame->T_lidar_imu.inverse(), imu_pred_times, imu_pred_poses, odom_frame->raw_frame->stamp, odom_frame->raw_frame->times, odom_frame->raw_frame->points);
-
-    auto frame = std::make_shared<gtsam_points::PointCloudCPU>(deskewed);
-    for (int i = 0; i < frame->size(); i++) {
-      frame->points[i] = odom_frame->T_lidar_imu.inverse() * frame->points[i];
-    }
-    frame->add_covs(covariance_estimation->estimate(frame->points_storage, odom_frame->raw_frame->neighbors));
-
-    odom_frame->frame = frame;
-*/
-/////////////////////////////
 
   const int current = odom_frames.size();
   const int last = current - 1;
@@ -520,8 +494,12 @@ SubMap::Ptr SubMapping::create_submap(bool force_create) const {
   logger->debug("merge frames");
   std::vector<gtsam_points::PointCloud::ConstPtr> keyframes_to_merge(keyframes.size());
   std::vector<Eigen::Isometry3d> poses_to_merge(keyframes.size());
+  submap->stamps_to_merge.resize(keyframes.size());
   for (int i = 0; i < keyframes.size(); i++) {
     keyframes_to_merge[i] = keyframes[i]->frame;
+////////////EG   
+    submap->stamps_to_merge[i] = keyframes[i]->stamp;
+/////////////////
     poses_to_merge[i] = submap->T_world_origin.inverse() * Eigen::Isometry3d(values->at<gtsam::Pose3>(X(keyframe_indices[i])).matrix());
   }
 

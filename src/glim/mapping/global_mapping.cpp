@@ -624,6 +624,7 @@ void GlobalMapping::save(const std::string& path) {
   GlobalConfig::instance()->dump(path + "/config");
   //if
   based_on_legacy_save_ply(path);
+  based_on_legacy_save_las(path);
   //another_save_ply(path);
   //another_save_ply_thicker(path);
   //another_save_ply_extended(path);
@@ -663,6 +664,160 @@ std::vector<Eigen::Vector4d> GlobalMapping::export_points() {
   return all_points;
 }
 
+void GlobalMapping::based_on_legacy_save_las(const std::string& path)
+{
+  //////////////////////////////////////////////////////////////////////
+  logger->info("Artif export points and save to LAS");
+  using namespace pdal;
+  std::string las_file_name = path + "/times_points.las"; 
+  Options options;
+  options.add("filename", las_file_name);
+  options.add("extra_dims", "all");
+  options.add("minor_version", 4);
+
+  PointTable table;
+  table.layout()->registerDim(Dimension::Id::GpsTime);
+  table.layout()->registerDim(Dimension::Id::X);
+  table.layout()->registerDim(Dimension::Id::Y);
+  table.layout()->registerDim(Dimension::Id::Z);
+ 
+  logger->info(std::string("Writing to file : ") + las_file_name);
+  PointViewPtr view(new PointView(table));
+  if(!view)
+  {
+    logger->error("Unable to const PointView");
+    return;
+  }
+
+  if(!fillViewTimesPointsLas(view))
+    return;
+
+  BufferReader reader;
+  reader.addView(view);
+
+  StageFactory factory;
+
+  // StageFactory always "owns" stages it creates. They'll be destroyed with the factory.
+  Stage *writer = factory.createStage("writers.las");
+  if(!writer)
+  {
+        std::cout << "Unable to create writer..." << std::endl;
+        return;
+  }
+
+  writer->setInput(reader);
+  writer->setOptions(options);
+  writer->prepare(table);
+  writer->execute(table);
+}
+
+bool GlobalMapping::fillViewTimesPointsLas(pdal::PointViewPtr view)
+{
+  std::vector<Eigen::Vector4d> all_points;
+  std::vector<double> all_times;
+  export_points_for_las(all_points, all_times);
+
+  if(all_points.size() != all_times.size())
+  {
+    logger->error("Error! array sizes are not equal!");
+    return false;
+  }
+  
+  try
+  {
+    for (size_t l = 0; l< all_points.size();l ++)
+    {
+      view->setField(pdal::Dimension::Id::GpsTime, l , all_times[l]);
+      view->setField(pdal::Dimension::Id::X, l , all_points[l].x());
+      view->setField(pdal::Dimension::Id::Y, l , all_points[l].y());
+      view->setField(pdal::Dimension::Id::Z, l , all_points[l].z());
+    }
+ 
+  }
+  catch(const std::exception& e)
+  {
+    logger->error("GlobalMapping::fillViewTimesPointsLas error: {}",e.what());
+    return false;
+  }
+  logger->info("GlobalMapping::fillViewTimesPointsLas all_points count = {}", all_points.size());
+  return true;
+}
+
+
+void GlobalMapping::export_points_for_las(std::vector<Eigen::Vector4d>& all_points, std::vector<double>& all_times)
+{
+  int num_all_points = 0;
+  for (const auto& submap : submaps) {
+    num_all_points += submap->merged_keyframe->size();
+  }
+
+  all_points.reserve(num_all_points);
+
+  for (const auto& submap : submaps) {
+     std::transform(submap->merged_keyframe->points, submap->merged_keyframe->points + submap->merged_keyframe->size(), std::back_inserter(all_points), [&](const Eigen::Vector4d& p) {
+      return submap->T_world_origin * p;
+    });
+  }
+
+  //std::cout << " print stamps_to_merge :"  << std::endl;
+  //int sm_num = 0;
+  std::vector<double> submap_times;
+  double point_time = 0;
+  for (const auto& submap : submaps) {
+ 
+    int points_count = submap->merged_keyframe->size();
+    //std::cout << " --------------------- " << sm_num++ << " points_count = " << points_count << std::endl;
+    submap_times.resize(points_count);
+    int stamps_count = submap->stamps_to_merge.size();
+    int submap_times_cursor = 0;
+    for(int i = 0; i < stamps_count; i++)
+    {
+      point_time = submap->stamps_to_merge.at(i);
+      //std::cout 
+      //<< " stamps_to_merge size = " << submap->stamps_to_merge.size() 
+      //<< " points_count/stamps_count = " << points_count/stamps_count << " point_time = "
+      //<< std::fixed << std::setprecision(9) << point_time << std::endl;
+      for(size_t k = 0;k < points_count/stamps_count + 1;k++)
+      {
+        point_time+=0.00002;//step
+        //std::cout << std::fixed << std::setprecision(9) << point_time << std::endl;
+        if(submap_times_cursor < submap_times.size())
+            submap_times[submap_times_cursor++] = point_time;
+      }    
+    }
+
+    all_times.insert(all_times.end(), submap_times.begin(), submap_times.end() );
+    submap_times.clear();  
+  }
+
+  //debug below - do remove
+  std::cout << " all_times.size() = " << all_times.size() <<  " all_points size = " << all_points.size() << std::endl;
+  if(std::find(all_times.begin(), all_times.end(), 0.0) == all_times.end())
+    std::cout << " all_times does not contain 0.0 value" << std::endl;
+  else
+    std::cout << " Err : all_times contains 0.0 value" << std::endl;
+  
+  std::set<double> all_times_set;
+  int l = 0;
+  for (auto &&t : all_times)
+  {
+    if(t == 0.0)
+      std::cout << l << std::endl;
+
+    l++; 
+    all_times_set.insert(t);
+  }
+
+  if(all_times_set.size() == all_times.size())
+    std::cout << " all_times does not contain equal values" << std::endl;
+  else
+    std::cout << " all_times contains equal values" << std::endl;
+  //Checks if the elements in range [first, last) are sorted in non-descending order.
+  std::cout << " all_times is sorted in non-descending order from begin to end : " 
+  << std::boolalpha << std::is_sorted(all_times.cbegin(), all_times.cend()) 
+  << std::endl; 
+  //debug above - do remove
+}
 
 void GlobalMapping::another_save_ply(const std::string& path)
 {

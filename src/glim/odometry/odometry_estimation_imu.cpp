@@ -251,7 +251,7 @@ EstimationFrame::ConstPtr OdometryEstimationIMU::insert_frame(const Preprocessed
 
   // Create IMU factor
   gtsam::ImuFactor::shared_ptr imu_factor;
-  if (num_imu_integrated >= 2) {
+  if (                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             >= 2) {
     imu_factor = gtsam::make_shared<gtsam::ImuFactor>(X(last), V(last), X(current), V(current), B(last), imu_integration->integrated_measurements());
     new_factors.add(imu_factor);
   } else {
